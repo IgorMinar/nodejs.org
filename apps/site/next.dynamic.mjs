@@ -1,34 +1,23 @@
 'use strict';
 
-import { exists as nodeExists } from 'node:fs';
-import { readFile as nodeReadFile } from 'node:fs/promises';
+import { exists } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { join, normalize, sep } from 'node:path';
 
 import matter from 'gray-matter';
 import { cache } from 'react';
 import { VFile } from 'vfile';
 
-import { readFile as runtimeReadFile } from './.cloudflare/node/fs/promises.mjs';
-import { exists as runtimeExists } from './.cloudflare/node/fs.mjs';
+import { getMarkdownFiles } from './.next.helpers.mjs';
 import { BASE_URL, BASE_PATH, IS_DEVELOPMENT } from './next.constants.mjs';
 import {
   IGNORED_ROUTES,
   DYNAMIC_ROUTES,
   PAGE_METADATA,
 } from './next.dynamic.constants.mjs';
-import { getMarkdownFiles } from './next.helpers.mjs';
 import { siteConfig } from './next.json.mjs';
 import { availableLocaleCodes, defaultLocale } from './next.locales.mjs';
 import { compileMDX } from './next.mdx.compiler.mjs';
-
-const readFile =
-  globalThis.navigator?.userAgent === 'Cloudflare-Workers'
-    ? runtimeReadFile
-    : nodeReadFile;
-const exists =
-  globalThis.navigator?.userAgent === 'Cloudflare-Workers'
-    ? runtimeExists
-    : nodeExists;
 
 // This is the combination of the Application Base URL and Base PATH
 const baseUrlAndPath = `${BASE_URL}${BASE_PATH}`;
@@ -50,7 +39,7 @@ const createCachedMarkdownCache = () => {
   if (IS_DEVELOPMENT) {
     return {
       has: () => false,
-      set: () => {},
+      set: () => { },
       get: () => null,
     };
   }
@@ -115,8 +104,10 @@ const getDynamicRouter = async () => {
 
     // This verifies if the given pathname actually exists on our Map
     // meaning that the route exists on the website and can be rendered
-    if (pathnameToFilename.has(normalizedPathname)) {
-      const filename = pathnameToFilename.get(normalizedPathname);
+    if (pathnameToFilename.has(normalizedPathname) || pathnameToFilename.has(`pages/${locale}/` + normalizedPathname)) {
+      const filename = (pathnameToFilename.get(normalizedPathname) ?? pathnameToFilename.get(`pages/${locale}/` + normalizedPathname)).replace(
+        new RegExp(`^pages/${locale}/`), ''
+      );
 
       let filePath = join(process.cwd(), 'pages');
 
@@ -131,8 +122,9 @@ const getDynamicRouter = async () => {
         return { source: fileContent, filename };
       }
 
-      const existsPromise = path =>
-        new Promise(resolve => exists(path, resolve));
+      const existsPromise = path => {
+        return new Promise(resolve => exists(path, resolve));
+      }
 
       // No cache hit exists, so we check if the localized file actually
       // exists within our file system and if it does we set it on the cache
